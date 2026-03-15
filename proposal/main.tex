@@ -66,7 +66,7 @@ the structure of path simulation distributes naturally across cores,
 a naive implementation using \texttt{rand()} isn't thread-safe. Concurrent calls introduce
 correlations between paths that bias the final estimate~\cite{Bradley2011ParallelizationTF}. Further
 performance optimizations are left on the table through poor memory layouts, unexploited SIMD hardware, and
-untuned compiler flags. These challenges make monte carlo simulations a
+untuned compiler flags. These challenges make Monte Carlo simulations a
 natural fit for applying HPC improvements.
 
 \section{Expected Results}
@@ -100,7 +100,7 @@ We will produce the following deliverables:
 
     \item \textbf{Stretch goals.} A CUDA implementation that offloads path
     simulation to the GPU, exploiting the parallel outer loop~\cite{Bradley2011ParallelizationTF}.
-    Also an exploration of Quasi-Monte Carlo methods and variance reduction techniques. ~\cite{Zhang2009PricingAO}. These address
+    Also, an exploration of Quasi-Monte Carlo methods and variance reduction techniques. ~\cite{Zhang2009PricingAO}. These address
     statistical efficiency rather than hardware throughput.
 \end{itemize}
 
