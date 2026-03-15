@@ -8,8 +8,7 @@
 \setlength\parindent{0pt}
 \setlength{\parskip}{8pt}
 
-\title{Exploring the Frontier --- From Specification to Speed\\
-Project Proposal}
+\title{Project Proposal: Benchmarking Monte Carlo Methods for Asian Options}
 
 \author{Rohan Yelandur}
 \author{Arnav Balaji} 
@@ -21,70 +20,107 @@ Project Proposal}
 
 \maketitle
 
-\section{Instructions}  
-
-\subsection{LaTeX Instructions} 
-\textsc{Do not} make your own \LaTeX file. Download the \LaTeX file at this link to your computer, rename it, and then use that template to write your proposal. 
-
-\begin{center}
-\url{https://www.overleaf.com/read/wwqkqcggnxrp#a2cb66}
-\end{center}
-
-Give yourselves a team name. Fill in your Team Members names in the author list. Add your team name and group number to the affiliation ({\verb|\affil{}|}) field.  Replace the title with one that accurately reflects the focus and scope of your project.
-
-\subsection{Proposal Overview}
-Your proposal should clearly define the problem you intend to solve, explain why it is interesting and relevant to the themes of program correctness and performance, and describe what you intend to produce. 
-
-The proposal must be written in \LaTeX and should be approximately 3–4 sections, not exceeding two pages in the provided template (roughly 800–1,200 words). It should be precise and specific enough that your classmates can understand exactly what you plan to accomplish and how you will approach it.
-
-
-
-\subsection{Submission Instructions} 
-Submit 
-\textbf{one} compiled PDF file containing your project proposal.  Your file should be named: ``\texttt{<team\_name>\_group<group number>.pdf}.''  \newline 
-
-Remove this section from your file before submitting. 
-
-
 \section{Project Description}
 
-Provide a clear description of the problem you intend to address.
-State the core objective of your project and what you aim to design,
-derive, implement, or analyze.
-
-You should cite relevant sources where appropriate.
-For example, structured approaches to high-performance matrix
-multiplication such as those described by Goto and
-van de Geijn~\cite{goto} illustrate how
-careful design decisions impact performance.
-
-
-
+This project implements and optimizes a Monte Carlo simulator for pricing Asian options in
+the C programming language. We will begin with a correct but naive, single-threaded baseline
+implementation. We then apply five high-performance computing optimizations:
+compiler flag tuning, cache-friendly memory layout, SIMD vectorization, parallelism, and replacement of \texttt{rand()} with
+thread-safe random number generation techniques. The goal is a high-throughput simulation engine where the impact
+of each improvement is measured in isolation, with both performance and statistical
+correctness analyzed at each step.
 
 \section{Background and Relevance}
 
-Provide sufficient background for the reader to understand the problem.
-Explain why the project is interesting, challenging, and relevant to
-the themes of correctness and performance in this course.
+An option is a financial contract that gives the buyer the right to buy or sell an underlying
+asset at a predetermined price. Asian options are a specific type of option whose final
+payoff is based on the average price of the asset over the option's lifetime, rather than
+just the ending price. ``Pricing'' an option means determining a fair value at which
+buyers and sellers initiate a transaction, a concept essential to trillions of dollars of
+daily market activity. Asian options are especially important in thinly-traded commodity
+markets such as crude oil, where averaging over time prevents price manipulation near
+maturity and reduces hedging costs relative to standard European options~\cite{Han2022ReviewOA}.
+
+Standard options can be priced using the Black-Scholes closed-form formula, which models the
+underlying asset as a geometric Brownian motion. However, no closed-form solution
+exists for Asian options because the arithmetic average of lognormally distributed prices
+does not itself follow a lognormal distribution~\cite{Han2022ReviewOA}. Closed-form approximations
+using geometric averages exist but systematically underestimate the true price and lose
+accuracy under high volatility~\cite{Han2022ReviewOA}.
+
+
+A suitable numerical solution is the Monte Carlo method, which estimates the value of an
+uncertain quantity by averaging the outcomes of many independent random
+simulations~\cite{Zhang2009PricingAO}. When applied to Asian options, each simulation generates a
+plausible price path for the underlying asset, then computes the payoff for that path. By the law of
+large numbers, the average payoff across all paths converges to the true option price. Since
+each path is independent, estimation error decreases at a rate of $1/\sqrt{n}$, where $n$
+is the number of simulated paths~\cite{Zhang2009PricingAO}.
+
+Achieving high simulation throughput is essential for financial institutions that must price
+and re-price options in real time to capture market inefficiencies and manage risk. The
+computational challenge arises because each of the millions of independent paths requires a
+long sequence of random number generations and floating-point operations, making the
+workload simultaneously compute-intensive, memory-intensive, and randomness-intensive. While
+the structure of path simulation distributes naturally across cores,
+a naive implementation using \texttt{rand()} isn't thread-safe. Concurrent calls introduce
+correlations between paths that bias the final estimate~\cite{Bradley2011ParallelizationTF}. Further
+performance optimizations are left on the table through poor memory layouts, unexploited SIMD hardware, and
+untuned compiler flags. These challenges make monte carlo simulations a
+natural fit for applying HPC improvements.
 
 \section{Expected Results}
 
-Describe the results or artifacts you intend to produce. For example:
+We will produce the following deliverables:
 
 \begin{itemize}
-    \item A formally specified problem
-    \item A derived or systematically designed algorithm
-    \item An implementation
-    \item A correctness argument
-    \item A performance analysis or comparison
+    % \item \textbf{Formally specified problem.} Pricing Asian call options under the
+    % risk-neutral geometric Brownian motion framework, where the underlying asset price
+    % follows
+    % \[
+    %     dS = rS\,dt + \sigma S\,dW(t),
+    % \]
+    % with parameters $S_0$ (initial price), $K$ (strike), $r$ (risk-free rate), $\sigma$
+    % (volatility), $T$ (maturity), $N$ (time steps per path), and $M$ (number of paths). The
+    % Monte Carlo estimator and its $1/\sqrt{M}$ convergence guarantee will be stated
+    % formally~\cite{kemna1990, Han2022ReviewOA}.
+
+    \item \textbf{Implementation.} A C codebase containing a single-threaded baseline
+    compiled at \texttt{-O0} and five incremental optimized versions, each differing by
+    exactly one improvement to allow clean speedup attribution.
+
+    \item \textbf{Correctness argument.} A proof that the parallelized estimator remains
+    statistically unbiased and that the per-thread RNG streams are independent. All
+    implementations will be verified to converge to the same reference price within a
+    statistical tolerance.
+
+    \item \textbf{Performance analysis.} A speedup table and roofline plot for all six
+    versions. We will include thread scaling data from 1 to all available cores on a UTCS
+    lab machine, along with GFLOPS/s estimates and memory bandwidth measurements.
+
+    \item \textbf{Stretch goals.} A CUDA implementation that offloads path
+    simulation to the GPU, exploiting the parallel outer loop~\cite{Bradley2011ParallelizationTF}.
+    Also an exploration of Quasi-Monte Carlo methods and variance reduction techniques. ~\cite{Zhang2009PricingAO}. These address
+    statistical efficiency rather than hardware throughput.
 \end{itemize}
 
-Be specific about what a successful outcome looks like.
+We define success as all implementations producing prices within a reasonable statistical
+margin of the reference value. We expect the fully optimized version to achieve at least a
+4$\times$ speedup over the \texttt{-O0} baseline, with each individual optimization
+contributing a measurable improvement.
 
 \section*{Team Plan}
 
-Describe how responsibilities will be divided among team members.
-Each member should be responsible for a substantive portion of the project.
+All of us will contribute across every part of the project, but each will take
+primary responsibility for one area.
+
+\textbf{Rohan: } prove that each HPC optimization preserves mathematical correctness. This
+includes showing that the parallelized Monte Carlo estimator is statistically unbiased,
+that RNG is properly independent per thread. He will also help design the cache-friendly memory layout for the C implementation.
+
+\textbf{Matthew: } write the C codebase including the \texttt{-O0} baseline, all five incrementally optimized versions, SIMD vectorization via AVX2 intrinsics, OpenMP parallelism, and the parallel RNG replacement.
+
+\textbf{Arnav: } build the benchmarking infrastructure and testing scripts. He will run all implementations across varying thread counts and problem sizes, collect GFLOPS/s and memory bandwidth data, and write the performance analysis section of the final report.
 
 \bibliographystyle{plain}
 \bibliography{citations}
