@@ -1,6 +1,8 @@
-# SHPC Project
+# Benchmarking Monte Carlo Methods for Asian Options
 
-This repository contains resources for the Science of High Performance Computing final project.
+This project was for the Science of High Performance Computing final project.
+
+This repository implements a Monte Carlo simulator to price Asian call options.
 
 ## Sources
 
