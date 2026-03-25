@@ -8,7 +8,7 @@
 \setlength\parindent{0pt}
 \setlength{\parskip}{8pt}
 
-\title{Project Proposal: Benchmarking Monte Carlo Methods for Asian Options}
+\title{Project Proposal: Microkernel for Machine Learning}
 
 \author{Rohan Yelandur}
 \author{Arnav Balaji} 
@@ -22,105 +22,40 @@
 
 \section{Project Description}
 
-This project implements and optimizes a Monte Carlo simulator for pricing Asian options in
-the C programming language. We will begin with a correct but naive, single-threaded baseline
-implementation. We then apply five high-performance computing optimizations:
-compiler flag tuning, cache-friendly memory layout, SIMD vectorization, parallelism, and replacement of \texttt{rand()} with
-thread-safe random number generation techniques. The goal is a high-throughput simulation engine where the impact
-of each improvement is measured in isolation, with both performance and statistical
-correctness analyzed at each step.
+The goal of this project is to design a microkernel for the bfloat16 datatype in BLIS, a datatype used commonly in machine learning settings. We will implement a high performance GEMM algorithm and analyze performance improvements. Our optimized microkernel will be cache aware, use SIMD intrinsics and data packing, and support multiprocessing. The code will be a compatible supplementation to the existing BLIS repository.
 
 \section{Background and Relevance}
 
-An option is a financial contract that gives the buyer the right to buy or sell an underlying
-asset at a predetermined price. Asian options are a specific type of option whose final
-payoff is based on the average price of the asset over the option's lifetime, rather than
-just the ending price. ``Pricing'' an option means determining a fair value at which
-buyers and sellers initiate a transaction, a concept essential to trillions of dollars of
-daily market activity. Asian options are especially important in thinly-traded commodity
-markets such as crude oil, where averaging over time prevents price manipulation near
-maturity and reduces hedging costs relative to standard European options~\cite{Han2022ReviewOA}.
+Most high performance computing tasks have traditionally relied on 64-bit and 32-bit floating point precision. However, advances in machine learning have created a shift towards using data types that take up less memory. Modern machine learning workloads, particularly in deep neural networks, involve large-scale matrix multiplications where reducing memory bandwidth and increasing throughput are critical for performance. Smaller data formats allow for higher throughput with minimal loss of accuracy in the machine learning model. bfloat16 (“Brain Float 16”) was invented by Google’s AI division to be used on their Cloud TPUs \cite{kanwar2019bfloat16}. The problem with standard FP16 is that its number of exponent bits limits the range of values it can represent. bfloat16 uses 8 bits for the exponent and only 7 for the mantissa, maintaining the range of FP32 at a justifiable loss of precision, especially for the problem setting.
 
-Standard options can be priced using the Black-Scholes closed-form formula, which models the
-underlying asset as a geometric Brownian motion. However, no closed-form solution
-exists for Asian options because the arithmetic average of lognormally distributed prices
-does not itself follow a lognormal distribution~\cite{Han2022ReviewOA}. Closed-form approximations
-using geometric averages exist but systematically underestimate the true price and lose
-accuracy under high volatility~\cite{Han2022ReviewOA}.
+High-performance implementations of matrix multiplication are central to both scientific computing and machine learning \cite{Goto2008AnatomyOH}. These implementations are typically based around blocked algorithms that maximize data reuse in cache and minimize memory operations. The core of this is the microkernel: a small, highly optimized routine that performs computation on sub-blocks of matrices using registers and SIMD instructions. The performance of the overall algorithm is largely determined by the efficiency of this microkernel, as it is invoked repeatedly throughout the computation.
 
-
-A suitable numerical solution is the Monte Carlo method, which estimates the value of an
-uncertain quantity by averaging the outcomes of many independent random
-simulations~\cite{Zhang2009PricingAO}. When applied to Asian options, each simulation generates a
-plausible price path for the underlying asset, then computes the payoff for that path. By the law of
-large numbers, the average payoff across all paths converges to the true option price. Since
-each path is independent, estimation error decreases at a rate of $1/\sqrt{n}$, where $n$
-is the number of simulated paths~\cite{Zhang2009PricingAO}.
-
-Achieving high simulation throughput is essential for financial institutions that must price
-and re-price options in real time to capture market inefficiencies and manage risk. The
-computational challenge arises because each of the millions of independent paths requires a
-long sequence of random number generations and floating-point operations, making the
-workload simultaneously compute-intensive, memory-intensive, and randomness-intensive. While
-the structure of path simulation distributes naturally across cores,
-a naive implementation using \texttt{rand()} isn't thread-safe. Concurrent calls introduce
-correlations between paths that bias the final estimate~\cite{Bradley2011ParallelizationTF}. Further
-performance optimizations are left on the table through poor memory layouts, unexploited SIMD hardware, and
-untuned compiler flags. These challenges make Monte Carlo simulations a
-natural fit for applying HPC improvements.
+The BLIS framework organizes BLAS operations around such microkernels, allowing high performance to be achieved by optimizing a small number of architecture-specific components while keeping the overall structure portable and reusable \cite{Zee2015BLISAF}. Extending this framework to support data types such as bfloat16 is therefore important for enabling high-performance computation in modern machine learning applications.
 
 \section{Expected Results}
 
-We will produce the following deliverables:
-
 \begin{itemize}
-    % \item \textbf{Formally specified problem.} Pricing Asian call options under the
-    % risk-neutral geometric Brownian motion framework, where the underlying asset price
-    % follows
-    % \[
-    %     dS = rS\,dt + \sigma S\,dW(t),
-    % \]
-    % with parameters $S_0$ (initial price), $K$ (strike), $r$ (risk-free rate), $\sigma$
-    % (volatility), $T$ (maturity), $N$ (time steps per path), and $M$ (number of paths). The
-    % Monte Carlo estimator and its $1/\sqrt{M}$ convergence guarantee will be stated
-    % formally~\cite{kemna1990, Han2022ReviewOA}.
+    \item \textbf{Implementation:} 
+    An optimized microkernel using SIMD intrinsics for bfloat16-based GEMM. 
 
-    \item \textbf{Implementation.} A C codebase containing a single-threaded baseline
-    compiled at \texttt{-O0} and five incremental optimized versions, each differing by
-    exactly one improvement to allow clean speedup attribution.
+    \item \textbf{Correctness:} 
+    We will validate our implementation by comparing results against a higher-precision reference (FP32 GEMM), as well as a naive 3-loop GEMM implementation. 
+    We will report numerical error and ensure correctness for matrices of arbitrary sizes, including those not divisible by block dimensions.
 
-    \item \textbf{Correctness argument.} A proof that the parallelized estimator remains
-    statistically unbiased and that the per-thread RNG streams are independent. All
-    implementations will be verified to converge to the same reference price within a
-    statistical tolerance.
-
-    \item \textbf{Performance analysis.} A speedup table and roofline plot for all six
-    versions. We will include thread scaling data from 1 to all available cores on a UTCS
-    lab machine, along with GFLOPS/s estimates and memory bandwidth measurements.
-
-    \item \textbf{Stretch goals.} A CUDA implementation that offloads path
-    simulation to the GPU, exploiting the parallel outer loop~\cite{Bradley2011ParallelizationTF}.
-    Also, an exploration of Quasi-Monte Carlo methods and variance reduction techniques. ~\cite{Zhang2009PricingAO}. These address
-    statistical efficiency rather than hardware throughput.
+    \item \textbf{Performance:} 
+    We will evaluate performance by measuring effective GFLOPS as a function of matrix size. 
 \end{itemize}
-
-We define success as all implementations producing prices within a reasonable statistical
-margin of the reference value. We expect the fully optimized version to achieve at least a
-4$\times$ speedup over the \texttt{-O0} baseline, with each individual optimization
-contributing a measurable improvement.
 
 \section*{Team Plan}
 
-All of us will contribute across every part of the project, but each will take
-primary responsibility for one area.
+\begin{itemize}
+    \item \textbf{Arnav:} Responsible for designing and implementing the microkernel using SIMD intrinsics, including optimizing fused multiply-add (FMA) operations for performance.
 
-\textbf{Rohan: } prove that each HPC optimization preserves mathematical correctness. This
-includes showing that the parallelized Monte Carlo estimator is statistically unbiased,
-that RNG is properly independent per thread. He will also help design the cache-friendly memory layout for the C implementation.
+    \item \textbf{Matthew:} Responsible for implementing data packing strategies and handling edge cases, ensuring correctness for matrices of arbitrary sizes.
 
-\textbf{Matthew: } write the C codebase including the \texttt{-O0} baseline, all five incrementally optimized versions, SIMD vectorization via AVX2 intrinsics, OpenMP parallelism, and the parallel RNG replacement.
+    \item \textbf{Rohan:} Responsible for integrating the implementation into a BLIS-style framework, developing testing infrastructure, and producing benchmarking and analysis documentation.
+\end{itemize}
 
-\textbf{Arnav: } build the benchmarking infrastructure and testing scripts. He will run all implementations across varying thread counts and problem sizes, collect GFLOPS/s and memory bandwidth data, and write the performance analysis section of the final report.
 
 \bibliographystyle{plain}
 \bibliography{citations}
