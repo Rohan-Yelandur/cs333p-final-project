@@ -1,7 +1,26 @@
 #include "include.h"
 
-void microkernel(int kc, __bfloat16 *A, __bfloat16 *B, __bfloat16 *C, int rsC, int csC) {
+void microkernel(int kc, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC) {
+    // Need to load and compute as fp32, then convert back to bfloat16.
+    __m256d gamma_01234567_0 = _mm256_loadu_ps(&C[0 * csC]);
+    __m256d gamma_01234567_1 = _mm256_loadu_ps(&C[1 * csC]);
+    __m256d gamma_01234567_2 = _mm256_loadu_ps(&C[2 * csC]);
+    __m256d gamma_01234567_3 = _mm256_loadu_ps(&C[3 * csC]);
 
+    int p = 0;
+    while(p < kc) {
+        __m256d alpha_0123_p = _mm256_loadu_ps(&A[p * MR]);
+        __m256d beta_p_j = _mm256_broadcast_ss(&B[p * NR]);
+        gamma_01234567_0 = _mm256_fmadd_ps(alpha_0123_p, beta_p_j, gamma_01234567_0);
+
+        
+        p++;
+    }
+
+    _mm256_storeu_ps(&C[0 * csC], gamma_01234567_0);
+    _mm256_storeu_ps(&C[1 * csC], gamma_01234567_1);
+    _mm256_storeu_ps(&C[2 * csC], gamma_01234567_2);
+    _mm256_storeu_ps(&C[3 * csC], gamma_01234567_3);
 }
 
 void gemm(int m, int n, int k,
@@ -52,11 +71,17 @@ void gemm(int m, int n, int k,
                 }
 
                 for(int jr = 0; jr < nc; jr += NR) {
-                    for(int ir = 0; ir < mc; ir += MR) {
-                        microkernel(kc, Apacked, Bpacked, C, rsC, csC);
+                    for(int ir = 0; ir < mc; ir += MR) {                       
+                        __bfloat16* Akernel = &Apacked[ir * KC];
+                        __bfloat16* Bkernel = &Bpacked[jr * KC];
+                        __bfloat16* Ckernel = &C[(ic + ir) * rsC + (jc + jr) * csC];
+                        microkernel(KC, Akernel, Bkernel, Ckernel, rsC, csC);
                     }
                 }
             }
         }
     }
+
+    free(Apacked);
+    free(Bpacked);
 }

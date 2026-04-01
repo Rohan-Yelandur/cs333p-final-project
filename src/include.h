@@ -8,10 +8,12 @@ int get_args( int argc, char **argv, int *nrepeats, int *first, int *last, int *
 
 void microkernel(int kc, __bfloat16 *A, __bfloat16 *B, __bfloat16 *C, int rsC, int csC);
 
-void gemm(int m, int n, int k,
+void bfloat16_gemm(int m, int n, int k,
           __bfloat16 *A, int rsA, int csA,
           __bfloat16 *B, int rsB, int csB,
           __bfloat16 *C, int rsC, int csC);
+
+int test_gemm( int nrepeats, int first, int last, int inc);
 
 #define MC 48
 #define NC 48
