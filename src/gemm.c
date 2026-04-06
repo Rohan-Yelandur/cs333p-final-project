@@ -1,29 +1,55 @@
 #include "include.h"
 
 void microkernel(int kc, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC) {
-    // Need to load and compute as fp32, then convert back to bfloat16.
-    __m256d gamma_01234567_0 = _mm256_loadu_ps(&C[0 * csC]);
-    __m256d gamma_01234567_1 = _mm256_loadu_ps(&C[1 * csC]);
-    __m256d gamma_01234567_2 = _mm256_loadu_ps(&C[2 * csC]);
-    __m256d gamma_01234567_3 = _mm256_loadu_ps(&C[3 * csC]);
+    __m128i c_raw0 = _mm_loadl_epi64((__m128i*)&C[0 * csC]);
+    __m128 gamma_0 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw0), 16));
+    __m128i c_raw1 = _mm_loadl_epi64((__m128i*)&C[1 * csC]);
+    __m128 gamma_1 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw1), 16));
+    __m128i c_raw2 = _mm_loadl_epi64((__m128i*)&C[2 * csC]);
+    __m128 gamma_2 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw2), 16));
+    __m128i c_raw3 = _mm_loadl_epi64((__m128i*)&C[3 * csC]);
+    __m128 gamma_3 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw3), 16));
 
     int p = 0;
-    while(p < kc) {
-        __m256d alpha_0123_p = _mm256_loadu_ps(&A[p * MR]);
-        __m256d beta_p_j = _mm256_broadcast_ss(&B[p * NR]);
-        gamma_01234567_0 = _mm256_fmadd_ps(alpha_0123_p, beta_p_j, gamma_01234567_0);
+    while (p < kc) {
+        __m128i a_raw = _mm_loadl_epi64((__m128i*)&A[p * MR]);
+        __m128 alpha = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(a_raw), 16));
 
-        
+        uint32_t b0 = ((uint32_t)(*(uint16_t*)&B[p * NR + 0])) << 16;
+        gamma_0 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b0), gamma_0);
+
+        uint32_t b1 = ((uint32_t)(*(uint16_t*)&B[p * NR + 1])) << 16;
+        gamma_1 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b1), gamma_1);
+
+        uint32_t b2 = ((uint32_t)(*(uint16_t*)&B[p * NR + 2])) << 16;
+        gamma_2 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b2), gamma_2);
+
+        uint32_t b3 = ((uint32_t)(*(uint16_t*)&B[p * NR + 3])) << 16;
+        gamma_3 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b3), gamma_3);
+
         p++;
     }
 
-    _mm256_storeu_ps(&C[0 * csC], gamma_01234567_0);
-    _mm256_storeu_ps(&C[1 * csC], gamma_01234567_1);
-    _mm256_storeu_ps(&C[2 * csC], gamma_01234567_2);
-    _mm256_storeu_ps(&C[3 * csC], gamma_01234567_3);
+    float tmp[4];
+
+    _mm_storeu_ps(tmp, gamma_0);
+    for (int i = 0; i < MR; i++)
+        C[0 * csC + i] = f32_to_bf16(tmp[i]);
+
+    _mm_storeu_ps(tmp, gamma_1);
+    for (int i = 0; i < MR; i++)
+        C[1 * csC + i] = f32_to_bf16(tmp[i]);
+
+    _mm_storeu_ps(tmp, gamma_2);
+    for (int i = 0; i < MR; i++)
+        C[2 * csC + i] = f32_to_bf16(tmp[i]);
+
+    _mm_storeu_ps(tmp, gamma_3);
+    for (int i = 0; i < MR; i++)
+        C[3 * csC + i] = f32_to_bf16(tmp[i]);
 }
 
-void gemm(int m, int n, int k,
+void bfloat16_gemm(int m, int n, int k,
           __bfloat16 *A, int rsA, int csA,
           __bfloat16 *B, int rsB, int csB,
           __bfloat16 *C, int rsC, int csC) {
@@ -35,7 +61,6 @@ void gemm(int m, int n, int k,
         for(int pc = 0; pc < k; pc += KC) {
             int kc = k - pc < KC ? k - pc : KC;
 
-            // Pack B
             int Bindex = 0;
             for(int jr = 0; jr < nc; jr += NR) {
                 int nr = nc - jr < NR ? nc - jr : NR;
@@ -46,7 +71,7 @@ void gemm(int m, int n, int k,
                         } else {
                             Bpacked[Bindex] = 0;
                         }
-                        Bindex ++;
+                        Bindex++;
                     }
                 }
             }
@@ -54,7 +79,6 @@ void gemm(int m, int n, int k,
             for(int ic = 0; ic < m; ic += MC) {
                 int mc = m - ic < MC ? m - ic : MC;
 
-                // Pack A
                 int Aindex = 0;
                 for(int ir = 0; ir < mc; ir += MR) {
                     int mr = mc - ir < MR ? mc - ir : MR;
@@ -65,17 +89,34 @@ void gemm(int m, int n, int k,
                             } else {
                                 Apacked[Aindex] = 0;
                             }
-                            Aindex ++;
+                            Aindex++;
                         }
                     }
                 }
 
                 for(int jr = 0; jr < nc; jr += NR) {
-                    for(int ir = 0; ir < mc; ir += MR) {                       
-                        __bfloat16* Akernel = &Apacked[ir * KC];
-                        __bfloat16* Bkernel = &Bpacked[jr * KC];
-                        __bfloat16* Ckernel = &C[(ic + ir) * rsC + (jc + jr) * csC];
-                        microkernel(KC, Akernel, Bkernel, Ckernel, rsC, csC);
+                    int nr = nc - jr < NR ? nc - jr : NR;
+                    for(int ir = 0; ir < mc; ir += MR) {
+                        int mr = mc - ir < MR ? mc - ir : MR;
+                        __bfloat16* Akernel = &Apacked[ir * kc];
+                        __bfloat16* Bkernel = &Bpacked[jr * kc];
+                        __bfloat16* Cpanel = &C[(ic + ir) * rsC + (jc + jr) * csC];
+
+                        if (mr == MR && nr == NR) {
+                            microkernel(kc, Akernel, Bkernel, Cpanel, rsC, csC);
+                        } else {
+                            for (int j = 0; j < nr; j++) {
+                                for (int i = 0; i < mr; i++) {
+                                    float sum = bf16_to_f32(Cpanel[i * rsC + j * csC]);
+                                    for (int p = 0; p < kc; p++) {
+                                        float a_val = bf16_to_f32(Akernel[p * MR + i]);
+                                        float b_val = bf16_to_f32(Bkernel[p * NR + j]);
+                                        sum += a_val * b_val;
+                                    }
+                                    Cpanel[i * rsC + j * csC] = f32_to_bf16(sum);
+                                }
+                            }
+                        }
                     }
                 }
             }

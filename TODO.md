@@ -1,9 +1,10 @@
 # Microkernel requirements:
-- SIMD intrinsics
-- Row-stored or column-stored compatible
 - Goto's 5 loop algorithm
-- Pack data
+    - Pack data
+- SIMD intrinsics
+- Handle Edge cases
 - Parallelism support
+- Row-stored or column-stored compatible
 
 # Implementation Steps
 

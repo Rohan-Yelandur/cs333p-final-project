@@ -1,8 +1,14 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <float.h>
+#include <stdint.h>
 #include <immintrin.h>
 #include <math.h>
 #include "blis.h"
+#include <limits.h>
 
-double shpc_maxabsdiff( int m, int n, double *A, int rsA, int csA, double *B, int rsB, int csB );
+#define max(x, y) (((x) > (y)) ? (x) : (y))
 
 int get_args( int argc, char **argv, int *nrepeats, int *first, int *last, int *inc );
 
@@ -14,6 +20,21 @@ void bfloat16_gemm(int m, int n, int k,
           __bfloat16 *C, int rsC, int csC);
 
 int test_gemm( int nrepeats, int first, int last, int inc);
+
+float bf16_to_f32(__bfloat16 val);
+
+__bfloat16 f32_to_bf16(float val);
+
+void rand_bf16(int m, int n, __bfloat16 *M, int rs, int cs);
+
+void ref_gemm(int m, int n, int k,
+              __bfloat16 *A, int rsA, int csA,
+              __bfloat16 *B, int rsB, int csB,
+              __bfloat16 *C, int rsC, int csC);
+
+double bf16_maxabsdiff(int m, int n,
+                       __bfloat16 *A, int rsA, int csA,
+                       __bfloat16 *B, int rsB, int csB);              
 
 #define MC 48
 #define NC 48
