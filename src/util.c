@@ -5,8 +5,18 @@ float bf16_to_f32(__bfloat16 val) {
     return *(float*)&bits;
 }
 __bfloat16 f32_to_bf16(float val) {
-    uint16_t bits = (*(uint32_t*)&val) >> 16;
-    return *(__bfloat16*)&bits;
+    uint32_t bits;
+    memcpy(&bits, &val, sizeof(bits));
+
+    if ((bits & 0x7fffffff) > 0x7f800000) {
+        uint16_t conv = 0x7fff;
+        return *(__bfloat16*)&conv;
+    }
+
+    bits += ((bits >> 16) & 1) + 0x7fff;
+    
+    uint16_t conv = (uint16_t)(bits >> 16);
+    return *(__bfloat16*)&conv;
 }
 
 // Fill matrix with random bf16 values
