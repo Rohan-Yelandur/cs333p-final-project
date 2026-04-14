@@ -5,7 +5,6 @@ INC   := src/
 BLIS_LIB  := $(BLIS_INSTALL_DIR)/lib/libblis.a
 BLIS_INC  := $(BLIS_INSTALL_DIR)/include/blis
 
-
 CC         := gcc
 LINKER     := $(CC)
 CFLAGS     := -O3 -I$(BLIS_INC) -I$(INC) -m64 -mavx2 -mfma \
@@ -14,10 +13,8 @@ CFLAGS     := -O3 -I$(BLIS_INC) -I$(INC) -m64 -mavx2 -mfma \
 CDEBUG     := -g
 LDFLAGS    := -lm -lpthread
 
-
-SRC = src/test.c src/gemm.c src/util.c
+SRC = src/test.c src/gemm.c src/gemm_fp32.c src/util.c
 OBJS = $(SRC:.c=.o)
-
 
 all: $(OBJS)
 	$(LINKER) $(OBJS) $(BLIS_LIB) -o test.x $(LDFLAGS)

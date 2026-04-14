@@ -141,3 +141,44 @@ int get_args( int argc, char **argv, int *nrepeats, int *first,
     printf("%% inc = %d\n", *inc);    
     return 0;
 }
+
+void rand_fp32(int m, int n, float *M, int rs, int cs)
+{
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < m; i++)
+            M[i * rs + j * cs] = (float)rand() / RAND_MAX;
+}
+
+void ref_gemm_fp32(int m, int n, int k,
+                   float *A, int rsA, int csA,
+                   float *B, int rsB, int csB,
+                   float *C, int rsC, int csC)
+{
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < m; i++)
+        {
+            float sum = C[i * rsC + j * csC];
+            for (int p = 0; p < k; p++)
+            {
+                float a_val = A[i * rsA + p * csA];
+                float b_val = B[p * rsB + j * csB];
+                sum += a_val * b_val;
+            }
+            C[i * rsC + j * csC] = sum;
+        }
+}
+
+double fp32_maxabsdiff(int m, int n,
+                       float *A, int rsA, int csA,
+                       float *B, int rsB, int csB)
+{
+    double maxdiff = 0.0;
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < m; i++)
+        {
+            double d = fabs((double)A[i * rsA + j * csA] -
+                            (double)B[i * rsB + j * csB]);
+            if (d > maxdiff) maxdiff = d;
+        }
+    return maxdiff;
+}
