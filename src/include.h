@@ -41,3 +41,21 @@ double bf16_maxabsdiff(int m, int n,
 #define KC 48
 #define MR 4
 #define NR 4
+
+void microkernel_fp32(int kc, float *A, float *B, float *C, int rsC, int csC);
+
+void fp32_gemm(int m, int n, int k,
+               float *A, int rsA, int csA,
+               float *B, int rsB, int csB,
+               float *C, int rsC, int csC);
+
+void rand_fp32(int m, int n, float *M, int rs, int cs);
+
+void ref_gemm_fp32(int m, int n, int k,
+                   float *A, int rsA, int csA,
+                   float *B, int rsB, int csB,
+                   float *C, int rsC, int csC);
+
+double fp32_maxabsdiff(int m, int n,
+                       float *A, int rsA, int csA,
+                       float *B, int rsB, int csB);
