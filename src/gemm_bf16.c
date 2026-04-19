@@ -5,7 +5,7 @@ static inline __m128 bf16_x4_to_f32(__m128i raw16)
     return _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(raw16), 16));
 }
 
-void microkernel(int k, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC)
+void microkernel_bf16(int k, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC)
 {
     __m256 gamma[NR];
 
@@ -37,7 +37,7 @@ void microkernel(int k, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, in
     }
 }
 
-void bfloat16_gemm(int m, int n, int k,
+void gemm_bf16(int m, int n, int k,
           __bfloat16 *A, int rsA, int csA,
           __bfloat16 *B, int rsB, int csB,
           __bfloat16 *C, int rsC, int csC) {
@@ -127,7 +127,7 @@ void bfloat16_gemm(int m, int n, int k,
                         __bfloat16* Cpanel = &C[ir * rsC + jr * csC];
 
                         if (mr == MR && nr == NR) {
-                            microkernel(k, Akernel, Bkernel, Cpanel, rsC, csC);
+                            bfloat16_microkernel(k, Akernel, Bkernel, Cpanel, rsC, csC);
                         } else {
                             for (int j = 0; j < nr; j++) {
                                 for (int i = 0; i < mr; i++) {

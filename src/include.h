@@ -12,9 +12,9 @@
 
 int get_args( int argc, char **argv, int *nrepeats, int *first, int *last, int *inc );
 
-void microkernel(int kc, __bfloat16 *A, __bfloat16 *B, __bfloat16 *C, int rsC, int csC);
+void microkernel_bf16(int kc, __bfloat16 *A, __bfloat16 *B, __bfloat16 *C, int rsC, int csC);
 
-void bfloat16_gemm(int m, int n, int k,
+void gemm_bf16(int m, int n, int k,
           __bfloat16 *A, int rsA, int csA,
           __bfloat16 *B, int rsB, int csB,
           __bfloat16 *C, int rsC, int csC);
@@ -45,7 +45,7 @@ double bf16_maxabsdiff(int m, int n,
 
 void microkernel_fp32(int kc, float *A, float *B, float *C, int rsC, int csC);
 
-void fp32_gemm(int m, int n, int k,
+void gemm_fp32(int m, int n, int k,
                float *A, int rsA, int csA,
                float *B, int rsB, int csB,
                float *C, int rsC, int csC);

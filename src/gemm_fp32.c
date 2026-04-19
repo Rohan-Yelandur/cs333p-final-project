@@ -22,7 +22,7 @@ void microkernel_fp32(int kc, float *A, float *B, float *C, int rsC, int csC)
         _mm256_storeu_ps(&C[j * csC], gamma[j]);
 }
 
-void fp32_gemm(int m, int n, int k,
+void gemm_fp32(int m, int n, int k,
                float *A, int rsA, int csA,
                float *B, int rsB, int csB,
                float *C, int rsC, int csC)
