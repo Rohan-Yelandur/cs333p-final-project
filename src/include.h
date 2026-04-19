@@ -39,8 +39,9 @@ double bf16_maxabsdiff(int m, int n,
 #define MC 48
 #define NC 48
 #define KC 48
-#define MR 4
-#define NR 4
+/* Register tile for both BF16 and FP32 microkernels */
+#define MR 8
+#define NR 6
 
 void microkernel_fp32(int kc, float *A, float *B, float *C, int rsC, int csC);
 

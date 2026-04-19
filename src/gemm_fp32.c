@@ -2,35 +2,24 @@
 
 void microkernel_fp32(int kc, float *A, float *B, float *C, int rsC, int csC)
 {
-    // This kernel assumes column-major storage with rsC == 1.
-    // That matches your current test harness.
+    /* Column-major C with rsC == 1 (matches test harness: C[i + j*csC]). */
     (void)rsC;
 
-    __m128 gamma_0 = _mm_loadu_ps(&C[0 * csC]);
-    __m128 gamma_1 = _mm_loadu_ps(&C[1 * csC]);
-    __m128 gamma_2 = _mm_loadu_ps(&C[2 * csC]);
-    __m128 gamma_3 = _mm_loadu_ps(&C[3 * csC]);
+    __m256 gamma[NR];
+    for (int j = 0; j < NR; j++)
+        gamma[j] = _mm256_loadu_ps(&C[j * csC]);
 
-    for (int p = 0; p < kc; p++)
-    {
-        __m128 alpha = _mm_loadu_ps(&A[p * MR]);
-
-        __m128 b0 = _mm_broadcast_ss(&B[p * NR + 0]);
-        __m128 b1 = _mm_broadcast_ss(&B[p * NR + 1]);
-        __m128 b2 = _mm_broadcast_ss(&B[p * NR + 2]);
-        __m128 b3 = _mm_broadcast_ss(&B[p * NR + 3]);
-
-        // Use mul + add instead of FMA to better match scalar reference arithmetic.
-        gamma_0 = _mm_add_ps(gamma_0, _mm_mul_ps(alpha, b0));
-        gamma_1 = _mm_add_ps(gamma_1, _mm_mul_ps(alpha, b1));
-        gamma_2 = _mm_add_ps(gamma_2, _mm_mul_ps(alpha, b2));
-        gamma_3 = _mm_add_ps(gamma_3, _mm_mul_ps(alpha, b3));
+    for (int p = 0; p < kc; p++) {
+        __m256 alpha = _mm256_loadu_ps(&A[p * MR]);
+        for (int j = 0; j < NR; j++) {
+            __m256 bvec = _mm256_broadcast_ss(&B[p * NR + j]);
+            /* mul + add (not FMA) to stay closer to naive accumulation vs BLIS. */
+            gamma[j] = _mm256_add_ps(gamma[j], _mm256_mul_ps(alpha, bvec));
+        }
     }
 
-    _mm_storeu_ps(&C[0 * csC], gamma_0);
-    _mm_storeu_ps(&C[1 * csC], gamma_1);
-    _mm_storeu_ps(&C[2 * csC], gamma_2);
-    _mm_storeu_ps(&C[3 * csC], gamma_3);
+    for (int j = 0; j < NR; j++)
+        _mm256_storeu_ps(&C[j * csC], gamma[j]);
 }
 
 void fp32_gemm(int m, int n, int k,

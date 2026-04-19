@@ -1,52 +1,40 @@
 #include "include.h"
 
-void microkernel(int k, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC) {
-    __m128i c_raw0 = _mm_loadl_epi64((__m128i*)&C[0 * csC]);
-    __m128 gamma_0 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw0), 16));
-    __m128i c_raw1 = _mm_loadl_epi64((__m128i*)&C[1 * csC]);
-    __m128 gamma_1 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw1), 16));
-    __m128i c_raw2 = _mm_loadl_epi64((__m128i*)&C[2 * csC]);
-    __m128 gamma_2 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw2), 16));
-    __m128i c_raw3 = _mm_loadl_epi64((__m128i*)&C[3 * csC]);
-    __m128 gamma_3 = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(c_raw3), 16));
+static inline __m128 bf16_x4_to_f32(__m128i raw16)
+{
+    return _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(raw16), 16));
+}
 
-    int p = 0;
-    while (p < k) {
-        __m128i a_raw = _mm_loadl_epi64((__m128i*)&A[p * MR]);
-        __m128 alpha = _mm_castsi128_ps(_mm_slli_epi32(_mm_cvtepu16_epi32(a_raw), 16));
+void microkernel(int k, __bfloat16* A, __bfloat16* B, __bfloat16* C, int rsC, int csC)
+{
+    __m256 gamma[NR];
 
-        uint32_t b0 = ((uint32_t)(*(uint16_t*)&B[p * NR + 0])) << 16;
-        gamma_0 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b0), gamma_0);
-
-        uint32_t b1 = ((uint32_t)(*(uint16_t*)&B[p * NR + 1])) << 16;
-        gamma_1 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b1), gamma_1);
-
-        uint32_t b2 = ((uint32_t)(*(uint16_t*)&B[p * NR + 2])) << 16;
-        gamma_2 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b2), gamma_2);
-
-        uint32_t b3 = ((uint32_t)(*(uint16_t*)&B[p * NR + 3])) << 16;
-        gamma_3 = _mm_fmadd_ps(alpha, _mm_broadcast_ss((float*)&b3), gamma_3);
-
-        p++;
+    for (int j = 0; j < NR; j++) {
+        __m128i c_raw = _mm_loadu_si128((__m128i*)&C[j * csC]);
+        __m128 g_lo = bf16_x4_to_f32(c_raw);
+        __m128 g_hi = bf16_x4_to_f32(_mm_srli_si128(c_raw, 8));
+        gamma[j] = _mm256_set_m128(g_hi, g_lo);
     }
 
-    float tmp[4];
+    for (int p = 0; p < k; p++) {
+        __m128i a_raw = _mm_loadu_si128((__m128i*)&A[p * MR]);
+        __m128 a_lo = bf16_x4_to_f32(a_raw);
+        __m128 a_hi = bf16_x4_to_f32(_mm_srli_si128(a_raw, 8));
+        __m256 alpha = _mm256_set_m128(a_hi, a_lo);
 
-    _mm_storeu_ps(tmp, gamma_0);
-    for (int i = 0; i < MR; i++)
-        C[0 * csC + i * rsC] = f32_to_bf16(tmp[i]);
+        for (int j = 0; j < NR; j++) {
+            uint32_t bj = ((uint32_t)(*(uint16_t*)&B[p * NR + j])) << 16;
+            __m256 bvec = _mm256_broadcast_ss((float*)&bj);
+            gamma[j] = _mm256_fmadd_ps(alpha, bvec, gamma[j]);
+        }
+    }
 
-    _mm_storeu_ps(tmp, gamma_1);
-    for (int i = 0; i < MR; i++)
-        C[1 * csC + i * rsC] = f32_to_bf16(tmp[i]);
-
-    _mm_storeu_ps(tmp, gamma_2);
-    for (int i = 0; i < MR; i++)
-        C[2 * csC + i * rsC] = f32_to_bf16(tmp[i]);
-
-    _mm_storeu_ps(tmp, gamma_3);
-    for (int i = 0; i < MR; i++)
-        C[3 * csC + i * rsC] = f32_to_bf16(tmp[i]);
+    float tmp[MR];
+    for (int j = 0; j < NR; j++) {
+        _mm256_storeu_ps(tmp, gamma[j]);
+        for (int i = 0; i < MR; i++)
+            C[j * csC + i * rsC] = f32_to_bf16(tmp[i]);
+    }
 }
 
 void bfloat16_gemm(int m, int n, int k,
@@ -54,14 +42,18 @@ void bfloat16_gemm(int m, int n, int k,
           __bfloat16 *B, int rsB, int csB,
           __bfloat16 *C, int rsC, int csC) {
 
-    __bfloat16* Apacked = (__bfloat16*)malloc(m * k * sizeof(__bfloat16));
-    __bfloat16* Bpacked = (__bfloat16*)malloc(k * n * sizeof(__bfloat16));
+    /* Packing lays out ceil(m/MR) x k x MR and ceil(n/NR) x k x NR panels. */
+    int n_panel_a = (m + MR - 1) / MR;
+    int n_panel_b = (n + NR - 1) / NR;
+    __bfloat16* Apacked = (__bfloat16*)malloc((size_t)n_panel_a * k * MR * sizeof(__bfloat16));
+    __bfloat16* Bpacked = (__bfloat16*)malloc((size_t)n_panel_b * k * NR * sizeof(__bfloat16));
 
     for (int jr = 0; jr < n; jr += NR) {
         for (int p = 0; p < k; p++) {
             for (int j = 0; j < NR; j++) {
                 if (jr + j < n) {
-                    Bpacked[(jr / NR) * k * NR + p * NR + j] = B[p * rsB + (jr + j) * csB];
+                    Bpacked[(jr / NR) * k * NR + p * NR + j] =
+                        B[p * rsB + (jr + j) * csB];
                 } else {
                     Bpacked[(jr / NR) * k * NR + p * NR + j] = 0;
                 }
@@ -73,7 +65,8 @@ void bfloat16_gemm(int m, int n, int k,
         for (int p = 0; p < k; p++) {
             for (int i = 0; i < MR; i++) {
                 if (ir + i < m) {
-                    Apacked[(ir / MR) * k * MR + p * MR + i] = A[(ir + i) * rsA + p * csA];
+                    Apacked[(ir / MR) * k * MR + p * MR + i] =
+                        A[(ir + i) * rsA + p * csA];
                 } else {
                     Apacked[(ir / MR) * k * MR + p * MR + i] = 0;
                 }
@@ -125,9 +118,9 @@ void bfloat16_gemm(int m, int n, int k,
 
                 The next part stays basically the same
                 */
-                for(int jr = 0; jr < n; jr += NR) {
+                for (int jr = 0; jr < n; jr += NR) {
                     int nr = n - jr < NR ? n - jr : NR;
-                    for(int ir = 0; ir < m; ir += MR) {
+                    for (int ir = 0; ir < m; ir += MR) {
                         int mr = m - ir < MR ? m - ir : MR;
                         __bfloat16* Akernel = &Apacked[(ir / MR) * k * MR];
                         __bfloat16* Bkernel = &Bpacked[(jr / NR) * k * NR];
