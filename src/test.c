@@ -116,7 +116,7 @@ int test_gemm(int nrepeats, int first, int last, int inc)
 
             t_start = bli_clock();
 
-            bfloat16_gemm(m, n, k,
+            gemm_bf16(m, n, k,
                           A_bf16, rsA, csA,
                           B_bf16, rsB, csB,
                           C_bf16, rsC, csC);
@@ -155,7 +155,7 @@ int test_gemm(int nrepeats, int first, int last, int inc)
 
             t_start = bli_clock();
 
-            fp32_gemm(m, n, k,
+            gemm_fp32(m, n, k,
                       A_fp32, rsA, csA,
                       B_fp32, rsB, csB,
                       C_fp32, rsC, csC);

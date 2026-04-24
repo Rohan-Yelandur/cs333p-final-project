@@ -45,10 +45,15 @@ void gemm_bf16(int m, int n, int k,
     /* Packing lays out ceil(m/MR) x k x MR and ceil(n/NR) x k x NR panels. */
     int n_panel_a = (m + MR - 1) / MR;
     int n_panel_b = (n + NR - 1) / NR;
-    __bfloat16* Apacked = (__bfloat16*)malloc((size_t)n_panel_a * k * MR * sizeof(__bfloat16));
-    __bfloat16* Bpacked = (__bfloat16*)malloc((size_t)n_panel_b * k * NR * sizeof(__bfloat16));
+    //__bfloat16* Apacked = (__bfloat16*)malloc((size_t)n_panel_a * k * MR * sizeof(__bfloat16));
+    //__bfloat16* Bpacked = (__bfloat16*)malloc((size_t)n_panel_b * k * NR * sizeof(__bfloat16));
 
-    for (int jr = 0; jr < n; jr += NR) {
+    __bfloat16* Apacked;
+    __bfloat16* Bpacked;
+    posix_memalign((void**)&Apacked, 32, (size_t)n_panel_a * k * MR * sizeof(__bfloat16));
+    posix_memalign((void**)&Bpacked, 32, (size_t)n_panel_b * k * NR * sizeof(__bfloat16));
+
+    /*for (int jr = 0; jr < n; jr += NR) {
         for (int p = 0; p < k; p++) {
             for (int j = 0; j < NR; j++) {
                 if (jr + j < n) {
@@ -72,7 +77,31 @@ void gemm_bf16(int m, int n, int k,
                 }
             }
         }
+    }*/
+
+    memset(Bpacked, 0, n_panel_b * k * NR * sizeof(__bfloat16));
+    for (int jr = 0; jr < n; jr += NR) {
+        int jr_off = (jr / NR) * k * NR;
+        int nr = (n - jr < NR) ? (n - jr) : NR;
+        for (int p = 0; p < k; p++) {
+            for (int j = 0; j < nr; j++) {
+                Bpacked[jr_off + p * NR + j] = B[p * rsB + (jr + j) * csB];
+            }
+        }
     }
+
+
+    memset(Apacked, 0, n_panel_a * k * MR * sizeof(__bfloat16));
+    for (int ir = 0; ir < m; ir += MR) {
+        int ir_off = (ir / MR) * k * MR;
+        int mr = (m - ir < MR) ? (m - ir) : MR;
+        for (int p = 0; p < k; p++) {
+            for (int i = 0; i < mr; i++) {
+                Apacked[ir_off + p * MR + i] = A[(ir + i) * rsA + p * csA];
+            }
+        }
+    }
+
 
     //Saving old version for now just in case
     /*__bfloat16* Apacked = (__bfloat16*)malloc(MC * KC * sizeof(__bfloat16));
@@ -127,7 +156,7 @@ void gemm_bf16(int m, int n, int k,
                         __bfloat16* Cpanel = &C[ir * rsC + jr * csC];
 
                         if (mr == MR && nr == NR) {
-                            bfloat16_microkernel(k, Akernel, Bkernel, Cpanel, rsC, csC);
+                            microkernel_bf16(k, Akernel, Bkernel, Cpanel, rsC, csC);
                         } else {
                             for (int j = 0; j < nr; j++) {
                                 for (int i = 0; i < mr; i++) {

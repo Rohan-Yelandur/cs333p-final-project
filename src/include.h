@@ -36,9 +36,9 @@ double bf16_maxabsdiff(int m, int n,
                        __bfloat16 *A, int rsA, int csA,
                        __bfloat16 *B, int rsB, int csB);              
 
-#define MC 48
-#define NC 48
-#define KC 48
+#define MC 256
+#define NC 3072
+#define KC 512
 /* Register tile for both BF16 and FP32 microkernels */
 #define MR 8
 #define NR 6
